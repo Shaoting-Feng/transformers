@@ -156,6 +156,7 @@ class Qwen3MoeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        use_eager: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -173,8 +174,9 @@ class Qwen3MoeAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
+        if use_eager is True or self.config._attn_implementation == "eager":
+            attention_interface: Callable = eager_attention_forward
+        else:
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -311,6 +313,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        use_eager: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
         """
@@ -349,6 +352,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             cache_position=cache_position,
+            use_eager=use_eager,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -449,6 +453,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        use_eager: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -492,6 +497,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                use_eager=use_eager,
                 **kwargs,
             )
 
